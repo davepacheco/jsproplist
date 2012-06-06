@@ -2,7 +2,10 @@
   "author": "Dave Pacheco <dap@joyent.com> (http://dtrace.org/blogs/dap/)",
   "name": "jsproplist",
   "description": "Print property names used in a JavaScript source file",
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "bin": {
+    "jsproplist": "./jsproplist"
+  },
   "repository": {
     "type": "git",
     "url": "git://github.com/davepacheco/jsproplist.git"
