@@ -76,3 +76,7 @@ prints out all fields started with the prefix "js_":
 
 which can be used to make sure field names are spelled consistently,
 initialized correctly in the constructor, and so on.
+
+This tool makes a best effort, which works reasonably well for certain (C-like)
+coding styles.  It does NOT catch all uses of all property names, particularly
+those accessed with brackets (as in "this\['foo'\]").
