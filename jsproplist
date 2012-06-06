@@ -1,0 +1,174 @@
+#!/usr/bin/env node
+
+/*
+ * jsproplist: find property names used in a JavaScript source file
+ */
+
+var mod_fs = require('fs');
+var mod_path = require('path');
+
+var mod_carrier = require('carrier');
+var mod_extsprintf = require('extsprintf');
+var mod_getopt = require('posix-getopt');
+
+var jp_arg0 = mod_path.basename(__filename);
+var jp_usage = mod_extsprintf.sprintf([
+    'usage: %s [-l] [-p prefix] file1 [file2...]',
+    '',
+    'Given a list of JavaScript files, emit a list of unique object ',
+    'properties used in the file, which can be used to find mistyped ',
+    'property names.   This tool uses a heuristic approach, but should find ',
+    'all properties used with the "." operator.  It will not find properties ',
+    'used with the "[]" operator.',
+    '',
+    'Options:',
+    '',
+    '    -l    Emit the line numbers on which each property is used',
+    '    -p    Only emit properties with the given prefix'
+].join('\n'), jp_arg0);
+
+var jp_failed = false;
+var jp_linenums = false;
+var jp_nfiles = 0;
+var jp_ndone = 0;
+var jp_filenames, jp_regex;
+var jp_props = {};
+
+function usage()
+{
+	console.error(jp_usage);
+	process.exit(2);
+}
+
+function main()
+{
+	var parser = new mod_getopt.BasicParser('lp:', process.argv);
+	var option;
+
+	jp_regex = '\\.(\\w[\\w\\d]+)';
+
+	while ((option = parser.getopt()) !== undefined) {
+		if (option.error)
+			usage();
+
+		switch (option.option) {
+		case 'l':
+			jp_linenums = true;
+			break;
+		case 'p':
+			jp_regex = '\\.' + option.optarg + '(\\w[\\w\\d]+)';
+			break;
+		}
+	}
+
+	jp_filenames = process.argv.slice(parser.optind());
+
+	if (jp_filenames.length === 0)
+		usage();
+
+	jp_nfiles = jp_filenames.length;
+	jp_filenames.forEach(processFile);
+}
+
+function processFile(filename)
+{
+	var file, linenum;
+
+	jp_props[filename] = {};
+	file = mod_fs.createReadStream(filename);
+
+	file.on('error', function (err) {
+		console.error('%s: %s', filename, err.message);
+		jp_failed = true;
+		doneFile();
+	});
+
+	file.on('open', function () {
+		file.removeAllListeners('error');
+		linenum = 0;
+		mod_carrier.carry(file, function (line) {
+			processLine(filename, ++linenum, line);
+		});
+	});
+
+	file.on('end', doneFile);
+}
+
+function doneFile()
+{
+	if (++jp_ndone != jp_nfiles)
+		return;
+
+	jp_filenames.forEach(function (filename) {
+		if (jp_filenames.length > 1)
+			console.log(filename);
+
+		var props = Object.keys(jp_props[filename]);
+		props.sort();
+		props.forEach(function (prop) {
+			if (!jp_linenums) {
+				console.log('%s', prop);
+				return;
+			}
+
+			console.log('%s %s', prop, Object.keys(
+			    jp_props[filename][prop]).sort().join(','));
+		});
+	});
+
+	process.exit(jp_failed ? 1 : 0);
+}
+
+function processLine(filename, linenum, line)
+{
+	/*
+	 * Remove quoted strings to avoid finding anything inside them.
+	 */
+	var i, pi;
+
+	for (i = 0; i < line.length; i++) {
+		if (line[i] == '\'' || line[i] == '"') {
+			if (pi === undefined) {
+				/* Start of a new quoted string. */
+				pi = i;
+				continue;
+			}
+
+			if (line[pi] == line[i]) {
+				/* End of a quoted string. */
+				pi = undefined;
+				continue;
+			}
+		}
+
+		if (pi === undefined)
+			continue;
+
+		if (line[i] == '\\') {
+			/* Ignore the next character. */
+			i++;
+			continue;
+		}
+
+		/* Wipe out characters inside a string. */
+		line[i] = ' ';
+	}
+
+	/*
+	 * Now use a regular expression to find property names.
+	 */
+	var re = new RegExp(jp_regex, 'g');
+	var matches = line.match(re);
+
+	if (!matches)
+		return;
+
+	matches.forEach(function (prop) {
+		if (!jp_props[filename].hasOwnProperty(prop))
+			jp_props[filename][prop] = {};
+
+		jp_props[filename][prop][linenum] = true;
+	});
+}
+
+main();
