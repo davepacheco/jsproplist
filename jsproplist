@@ -112,7 +112,9 @@ function doneFile()
 			}
 
 			console.log('%s %s', prop, Object.keys(
-			    jp_props[filename][prop]).sort().join(','));
+			    jp_props[filename][prop]).sort(function (a, b) {
+				return (parseInt(a, 10) - parseInt(b, 10));
+			    }).join(','));
 		});
 	});
 
